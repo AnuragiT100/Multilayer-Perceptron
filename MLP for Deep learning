@@ -1,0 +1,150 @@
+import numpy as np
+import tensorflow as tf
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.model_selection import train_test_split
+
+# Example data structure for one sample (flattened from BH-1 to BH-4 features)
+# You need a dataset with many such samples (rows)
+# Here just dummy random data to show format
+
+# Define categorical encodings for qualitative parameters:
+soil_type_map = {
+    'Granular (dense to very dense)': 3,
+    'Granular (dense to medium dense)': 2,
+    'Clayey (soft to medium stiff)': 1,
+}
+
+excavation_difficulty_map = {
+    'Low': 1,
+    'Low to moderate': 2,
+    'Moderate': 3,
+    'Moderate to high': 4,
+    'High': 5,
+}
+
+settlement_potential_map = {
+    'Low': 1,
+    'Low to moderate': 2,
+    'Moderate': 3,
+    'Moderate to high': 4,
+    'High': 5,
+}
+
+waterproofing_need_map = {
+    'Yes': 1,
+    'No': 0,
+}
+
+foundation_type_map = {
+    'Shallow foundation recommended': 1,
+    'Shallow with design care': 2,
+    'Shallow or deep (based on load)': 3,
+    'Deep foundation (piles, caissons)': 4,
+}
+
+# Example dummy dataset (replace with your actual data arrays)
+# Each row: features from BH-1 to BH-4 concatenated
+
+# Let's assume input features per BH:
+# [N-value avg, Bearing Capacity, Groundwater Depth avg, Excavation Difficulty encoded, Settlement Potential encoded, Soil Type encoded]
+
+def encode_bh_features(bh_dict):
+    # Extract and encode numerical and categorical features from each BH dict
+    n_val_avg = np.mean(bh_dict['N-value'])  # e.g., mean of blow counts
+    bearing_capacity = bh_dict['Bearing Capacity']
+    groundwater_depth_avg = np.mean(bh_dict['Ground Water Depth'])
+    excavation_diff = excavation_difficulty_map.get(bh_dict['Excavation Difficulty'], 0)
+    settlement_pot = settlement_potential_map.get(bh_dict['Settlement Potential'], 0)
+    soil_type_enc = soil_type_map.get(bh_dict['Soil Type'], 0)
+    
+    return [n_val_avg, bearing_capacity, groundwater_depth_avg, excavation_diff, settlement_pot, soil_type_enc]
+
+# Example data for 1 sample (you'll have many rows in your real dataset)
+
+bh1 = {
+    'N-value': [35, 50],
+    'Bearing Capacity': 250,
+    'Ground Water Depth': [3,7],
+    'Excavation Difficulty': 'Moderate',
+    'Settlement Potential': 'Low',
+    'Soil Type': 'Granular (dense to very dense)',
+}
+
+bh2 = {
+    'N-value': [20,40],
+    'Bearing Capacity': 200,
+    'Ground Water Depth': [4,7],
+    'Excavation Difficulty': 'Moderate',
+    'Settlement Potential': 'Moderate',
+    'Soil Type': 'Granular (dense to medium dense)',
+}
+
+bh3 = {
+    'N-value': [25,45],
+    'Bearing Capacity': 180,
+    'Ground Water Depth': [4,7],
+    'Excavation Difficulty': 'Moderate to high',
+    'Settlement Potential': 'Moderate to high',
+    'Soil Type': 'Granular (dense to medium dense)',
+}
+
+bh4 = {
+    'N-value': [10,20],
+    'Bearing Capacity': 100,
+    'Ground Water Depth': [4,8],
+    'Excavation Difficulty': 'Low to moderate',
+    'Settlement Potential': 'High',
+    'Soil Type': 'Clayey (soft to medium stiff)',
+}
+
+# Encode input features (BH1 to BH4)
+input_features = np.array(
+    encode_bh_features(bh1) + 
+    encode_bh_features(bh2) + 
+    encode_bh_features(bh3) + 
+    encode_bh_features(bh4)
+).reshape(1, -1)
+
+# Target variables for BH5 and BH6 (example values)
+# Let's predict N-value avg, Bearing Capacity, Ground Water Depth avg, Excavation Difficulty, Settlement Potential for BH5 and BH6
+bh5_target = [35, 225, 5, 3, 2]  # Encoded target for BH-5
+bh6_target = [25, 160, 5, 3, 4]  # Encoded target for BH-6
+
+target = np.array(bh5_target + bh6_target).reshape(1, -1)
+
+# Normally you will have multiple samples, so input_features and target are arrays of shape (samples, features)
+
+# For demo, create dummy dataset by repeating this sample 100 times with small noise
+X = np.repeat(input_features, 100, axis=0) + np.random.normal(0, 1, (100, input_features.shape[1]))
+y = np.repeat(target, 100, axis=0) + np.random.normal(0, 1, (100, target.shape[1]))
+
+# Normalize inputs and outputs
+input_scaler = StandardScaler()
+output_scaler = StandardScaler()
+
+X_scaled = input_scaler.fit_transform(X)
+y_scaled = output_scaler.fit_transform(y)
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
+
+# Build MLP model
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
+    tf.keras.layers.Dense(64, activation='relu'),
+    tf.keras.layers.Dense(y_train.shape[1])  # output layer size = number of target parameters
+])
+
+model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+
+# Train model
+model.fit(X_train, y_train, epochs=50, validation_split=0.2)
+
+# Predict on test set
+y_pred_scaled = model.predict(X_test)
+
+# Inverse transform predictions
+y_pred = output_scaler.inverse_transform(y_pred_scaled)
+
+print("Predicted BH-5 and BH-6 parameters (example):")
+print(y_pred[0])
